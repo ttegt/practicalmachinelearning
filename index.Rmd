@@ -2,19 +2,75 @@
 title: "Practical Machine Learning Course Project"
 author: "Tom Tegtmeyer"
 date: "April 3, 2016"
-output: html_document
+output: 
+  html_document: 
+    keep_md: yes
 ---
+```{r,message=FALSE,warning=FALSE}
+library(caret);library(randomForest)
+```
+
 
 Here it is
 
+Downloading the training and test sets
+```{r, cache=TRUE}
+training<-read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+testing<-read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+```
+
+Preparing the training set
+
+```{r, cache=TRUE}
+library(caret)
+#eliminating the near zero variables
+nsv<-nearZeroVar(training,saveMetrics = TRUE) 
+training<-training[,nsv$nzv==FALSE]
+#eliminating the index, username, timestamp, new_window, and num_window variables 
+training<-training[,-(1:6)]
+#eliminating the variables that have mostly na.values
+sums<-colSums(is.na(training))
+nacols<-as.vector(sums>2)
+training<-training[,nacols==FALSE]
+```
+
+Creating a random forest prediction model based on the training data.
+```{r,cache=TRUE}
+library(randomForest)
+set.seed(125)
+training.rf<-randomForest(classe~.,data=training)
+print(training.rf)
+```
+
+Making predictions
 ```{r}
-summary(cars)
+
+pred<-predict(training.rf,testing)
+print(pred)
+pred2<-predict(training.rf,testing,"vote")
+print(pred2)
+print(apply(pred2,1,max))
 ```
 
-You can also embed plots, for example:
-
-```{r, echo=FALSE}
-plot(cars)
+Cross validation
+```{r,cache=TRUE}
+set.seed(12321)
+folds<-createFolds(y=training$classe,k=10,list=TRUE,returnTrain=TRUE)
+acc<-numeric(10)
+for (i in 1:10){
+        cv.train<-training[folds[[i]],]
+        cv.test<-training[-folds[[i]],]
+        cvrf<-randomForest(classe~.,data=cv.train)
+        cvpred<-predict(cvrf,cv.test)
+        acc[i]<-confusionMatrix(cvpred,cv.test$classe)$overall[1]
+        print(paste("Accuracy for fold", i, ":", acc[i]))
+        rm(cvrf)
+}
+print(mean(acc))
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+Plotting the variables of importance
+```{r}
+varImpPlot(training.rf, n.var=10)
+```
+
