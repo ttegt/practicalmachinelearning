@@ -1,44 +1,55 @@
-# Practical Machine Learning Course Project
+# Practical Machine Learning Course Project: Qualitative Activity Recognition
 Tom Tegtmeyer  
-April 3, 2016  
+April 6, 2016  
+
+# 1: Synopsis
+In this assignment, we use a random forest algorithm to create a model that will predict how an exercise was performed based upon various accelerometer measurements. As [described](http://groupware.les.inf.puc-rio.br/har) by the authors, 
+
+> Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+After reducing our training set to 52 predictor variables, we create the random forest model, which has an encouraging 0.29% estimated out-of-bag error rate. Finally, we use our model to predict the classes for a 20-subject test set.
+
+
+# 2: Downloading and Processing the Data
+
+First, we load the packages we will be using for the analysis.
 
 ```r
-library(caret);library(randomForest)
+library(caret); library(randomForest); library(scatterplot3d)
 ```
 
 
-Here it is
-
-Downloading the training and test sets
+Next, we load the training and test sets.
 
 ```r
 training<-read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
 testing<-read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
 ```
 
-Preparing the training set
+Before creating the prediction model, we need to clean up the dataset. We remove the near zero variance variables. Eliminating the X variable is essential, because it is merely the index value, and the test set has its own indexing. We also remove the user_name, time stamp, and window variables. (We could leave the time stamp and numwindow variables in, but it almost feels like cheating to include them. Indeed, when included, part 1 of the raw time stamp and window number are the most important variables.) Finally, we remove the variables with mostly NA values. As a result, all of the variables used in our model come from actual measurements.
 
 
 ```r
-library(caret)
-#eliminating the near zero variables
+#eliminating the near zero variance variables
 nsv<-nearZeroVar(training,saveMetrics = TRUE) 
 training<-training[,nsv$nzv==FALSE]
-#eliminating the index, username, timestamp, new_window, and num_window variables 
+#eliminating the index, username, timestamp, and num_window variables 
 training<-training[,-(1:6)]
-#eliminating the variables that have mostly na.values
+#eliminating the variables that have mostly NA values
 sums<-colSums(is.na(training))
 nacols<-as.vector(sums>2)
 training<-training[,nacols==FALSE]
 ```
 
-Creating a random forest prediction model based on the training data.
+#3: Creating the model
+
+Now that we have processed the data, we will create a random forest prediction model based on the training data, using the randomForest package. (Note: we are not using train() from the caret package because of performance issues related to the size of the dataset.)
+
 
 ```r
-library(randomForest)
 set.seed(125)
 training.rf<-randomForest(classe~.,data=training)
-print(training.rf)
+training.rf
 ```
 
 ```
@@ -59,11 +70,88 @@ print(training.rf)
 ## E    0    0    1    6 3600 0.0019406709
 ```
 
-Making predictions
+The dataset seems to be particulary amenable to the random forest approach. The confusion matrix reveals a relatively small number of misclassified values in the training set, and the estimated out-of-bag error is a tiny 0.29%. Note that, according to the inventors of the random forest algorithm, [Breiman and Cutler](http://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm#ooberr), "In random forests, there is no need for cross-validation or a separate test set to get an unbiased estimate of the test set error." Despite that, for educational purposes, we will run our own cross-validation in the next section.  
+
+Next, we create a plot of the 10 most important variables in the model.
+
+
+```r
+varImpPlot(training.rf, n.var=10, main = "Variable Importance")
+```
+
+![](index_files/figure-html/unnamed-chunk-5-1.png)
+
+The following is a 3-dimensional scatterplot of the three most important variables, colored by the "classe" variable. We see a bit of separation in the different groups.
+
+
+```r
+with(training,scatterplot3d(roll_belt,yaw_belt,pitch_forearm,color=as.numeric(classe),pch=19,main="Top 3 variables, colored by classe"))
+legend("topright",col=1:6,c("A","B","C","D","E"),pch=19)
+```
+
+![](index_files/figure-html/unnamed-chunk-6-1.png)
+
+# 4: Cross-Validation
+
+As mentioned above, to estimate the out of sample error, we perform k-fold cross-validation (with k = 10) on the training set with the random forest algorithm.
+
+
+```r
+set.seed(12321)
+#create folds for cross validation
+folds<-createFolds(y=training$classe,k=10,list=TRUE,returnTrain=TRUE)
+acc<-numeric(10)
+for (i in 1:10){
+        cv.train<-training[folds[[i]],] #create training set for fold
+        cv.test<-training[-folds[[i]],] #create testing set
+        cvrf<-randomForest(classe~.,data=cv.train)
+        cvpred<-predict(cvrf,cv.test)
+        #extract accuracy rate
+        acc[i]<-confusionMatrix(cvpred,cv.test$classe)$overall[1]
+        print(paste("Accuracy for fold", i, ":", acc[i]))
+        rm(cvrf)
+}
+```
+
+```
+## [1] "Accuracy for fold 1 : 0.997450280469148"
+## [1] "Accuracy for fold 2 : 0.996432212028542"
+## [1] "Accuracy for fold 3 : 0.997451580020387"
+## [1] "Accuracy for fold 4 : 0.994903160040775"
+## [1] "Accuracy for fold 5 : 0.998470948012232"
+## [1] "Accuracy for fold 6 : 0.99796126401631"
+## [1] "Accuracy for fold 7 : 0.996432212028542"
+## [1] "Accuracy for fold 8 : 0.992868059093225"
+## [1] "Accuracy for fold 9 : 0.99796126401631"
+## [1] "Accuracy for fold 10 : 0.99847250509165"
+```
+
+
+```r
+noquote(paste("Mean accuracy rate: ",mean(acc),sep=""))
+```
+
+```
+## [1] Mean accuracy rate: 0.996840348481712
+```
+
+```r
+noquote(paste("Mean error rate: ", round((1-mean(acc))*100,2),"%",sep=""))
+```
+
+```
+## [1] Mean error rate: 0.32%
+```
+
+We see that the mean error rate is close to the out-of-bag error estimate of 0.29% from the randomForest output.
+
+# 5: The Prediction
+Applying our random forest model to the test set gives us the following predictions for the "classe"" variable.
+
 
 ```r
 pred<-predict(training.rf,testing)
-print(pred)
+pred
 ```
 
 ```
@@ -72,9 +160,12 @@ print(pred)
 ## Levels: A B C D E
 ```
 
+It is informative to see the "vote" breakdown for each subject in the test set.
+
+
 ```r
 pred2<-predict(training.rf,testing,"vote")
-print(pred2)
+pred2
 ```
 
 ```
@@ -104,7 +195,7 @@ print(pred2)
 ```
 
 ```r
-print(apply(pred2,1,max))
+apply(pred2,1,max) #find each row maximum
 ```
 
 ```
@@ -114,49 +205,4 @@ print(apply(pred2,1,max))
 ## 0.990 1.000 0.952 0.948 0.984 0.850 0.892 1.000
 ```
 
-Cross validation
-
-```r
-set.seed(12321)
-folds<-createFolds(y=training$classe,k=10,list=TRUE,returnTrain=TRUE)
-acc<-numeric(10)
-for (i in 1:10){
-        cv.train<-training[folds[[i]],]
-        cv.test<-training[-folds[[i]],]
-        cvrf<-randomForest(classe~.,data=cv.train)
-        cvpred<-predict(cvrf,cv.test)
-        acc[i]<-confusionMatrix(cvpred,cv.test$classe)$overall[1]
-        print(paste("Accuracy for fold", i, ":", acc[i]))
-        rm(cvrf)
-}
-```
-
-```
-## [1] "Accuracy for fold 1 : 0.997450280469148"
-## [1] "Accuracy for fold 2 : 0.996432212028542"
-## [1] "Accuracy for fold 3 : 0.997451580020387"
-## [1] "Accuracy for fold 4 : 0.994903160040775"
-## [1] "Accuracy for fold 5 : 0.998470948012232"
-## [1] "Accuracy for fold 6 : 0.99796126401631"
-## [1] "Accuracy for fold 7 : 0.996432212028542"
-## [1] "Accuracy for fold 8 : 0.992868059093225"
-## [1] "Accuracy for fold 9 : 0.99796126401631"
-## [1] "Accuracy for fold 10 : 0.99847250509165"
-```
-
-```r
-print(mean(acc))
-```
-
-```
-## [1] 0.9968403
-```
-
-Plotting the variables of importance
-
-```r
-varImpPlot(training.rf, n.var=10)
-```
-
-![](index_files/figure-html/unnamed-chunk-7-1.png)
-
+This final line of output gives the vote totals for the predicted classes. Note that the minimum of these is 0.718 for subject 3. We can be fairly confident of all of our predictions.
