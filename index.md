@@ -1,6 +1,6 @@
 # Practical Machine Learning Course Project: Qualitative Activity Recognition
 Tom Tegtmeyer  
-April 6, 2016  
+April 9, 2016  
 
 # 1: Synopsis
 In this assignment, we use a random forest algorithm to create a model that will predict how an exercise was performed based upon various accelerometer measurements. As [described](http://groupware.les.inf.puc-rio.br/har) by the authors, 
